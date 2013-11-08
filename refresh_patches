@@ -60,11 +60,11 @@ def generate_changes_entry(args, basename, refreshed_patches):
 
     write_changes = False
     timestamp = datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y")
-    changes = """-------------------------------------------------------------------
+    changes_header = """-------------------------------------------------------------------
 {0} - {1}
 
-- Rebased patches:
 """.format(timestamp, args.changesauthor)
+    changes = "- Rebased patches:\n"
 
     if refreshed_patches:
         write_changes = True
@@ -92,7 +92,16 @@ def generate_changes_entry(args, basename, refreshed_patches):
         with open("{0}.changes".format(basename), "r+") as f:
             old_content = f.read()
             f.seek(0)
-            f.write(changes + old_content)
+            # Check if we didn't write the same content during the previous run:
+            old_changes = []
+            for line in old_content.split("\n")[3:]:
+                if line.startswith("----"):
+                    break;
+                old_changes.append(line)
+            # Now we parsed the previous changes entry, compare with this one...
+            if "\n".join(old_changes)+"\n" == changes:
+                return
+            f.write(changes_header + changes + old_content)
 
 
 if __name__ == "__main__":
