@@ -96,7 +96,7 @@ def generate_changes_entry(args, basename, refreshed_patches):
             old_changes = []
             for line in old_content.split("\n")[3:]:
                 if line.startswith("----"):
-                    break;
+                    break
                 old_changes.append(line)
             # Now we parsed the previous changes entry, compare with this one...
             if "\n".join(old_changes)+"\n" == changes:
