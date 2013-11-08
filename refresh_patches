@@ -15,6 +15,7 @@
 # under the License.
 
 import argparse
+import datetime
 import glob
 import os
 import re
@@ -45,9 +46,61 @@ def silent_popen(args, **kwargs):
                             stdout=subprocess.PIPE, **kwargs).communicate()[0]
 
 
+def generate_changes_entry(args, basename, refreshed_patches):
+    if not args.changesauthor:
+        try:
+            with open(os.path.expanduser("~/.oscrc"), "r") as oscrc:
+                for line in oscrc.readlines():
+                    match = re.match(r"\s*email=(.*)$", line)
+                    if match:
+                        args.changesauthor = match.groups(1)[0]
+                        break
+        except IOError:
+            args.changesauthor = "opensuse-packaging@opensuse.org",
+
+    write_changes = False
+    timestamp = datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y")
+    changes = """-------------------------------------------------------------------
+{0} - {1}
+
+- Rebased patches:
+""".format(timestamp, args.changesauthor)
+
+    if refreshed_patches:
+        write_changes = True
+        for patch in refreshed_patches:
+            changes += "  + {0} (only offset)\n".format(patch)
+
+    # Check with osc for otherwise modified patches:
+    otherwise_modified_patches = []
+    try:
+        for line in silent_popen(["osc", "status"]).split("\n"):
+            if line.startswith("M "):  # Something got modified
+                filename = line[1:].strip()
+                if (filename.endswith(".patch") or filename.endswith(".diff") or filename.endswith(".dif")) and filename not in refreshed_patches:
+                    otherwise_modified_patches.append(filename)
+    except OSError:
+        pass  # No osc installed, sad thing
+
+    if otherwise_modified_patches:
+        write_changes = True
+        for patch in otherwise_modified_patches:
+            changes += "  + {0} (manually)\n".format(patch)
+
+    if write_changes:
+        changes += "\n"
+        with open("{0}.changes".format(basename), "r+") as f:
+            old_content = f.read()
+            f.seek(0)
+            f.write(changes + old_content)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Refresh Patches")
-
+    parser.add_argument("--changesgenerate", help="Whether or not to generate changes file entries from SCM commit log since a given parent revision (see changesrevision).  Default is 'disable'.")
+    parser.add_argument("--changesauthor", help="The author of the changes file entry to be written, defaults to first email entry in ~/.oscrc or \"opensuse-packaging@opensuse.org\" if there is no .oscrc found.")
+    parser.add_argument('--outdir',
+                        help='osc service parameter that does nothing')
     args = parser.parse_args()
 
     for specfile in glob.glob('*.spec'):
@@ -60,6 +113,7 @@ if __name__ == "__main__":
         #NOTE(saschpe): Beautiful, I know:
         quilt_dir = match.group(1).rsplit(".tar")[0].rsplit(".zip")[0]
 
+        refreshed_patches = []
         try:
             src_dir = os.getcwd()
             os.chdir(quilt_dir)
@@ -72,11 +126,13 @@ if __name__ == "__main__":
                     break
                 match = re.search(QUILT_PUSH_OFFSET_RE, output)
                 if match:  # Oh, got something to refresh
-                    print("Patch {0} refreshed".format(match.groups(1)[0]))
+                    patch_name = match.groups(1)[0]
+                    print("Patch {0} refreshed".format(patch_name))
                     output2 = silent_popen(["quilt", "refresh"])
                     match2 = re.search(QUILT_REFRESH_SUCCESS_RE, output2)
                     if not match:  # It didn't work
-                        raise QuiltException("Patch {0} refresh failed:\n{0}".format(match.groups(1)[0], output2))
+                        raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
+                    refreshed_patches.append(patch_name)
                     continue
                 match = re.search(QUILT_PUSH_SUCCESS_RE, output)
                 if match:  # Patch applied as is
@@ -90,4 +146,5 @@ if __name__ == "__main__":
         finally:
             os.chdir(src_dir)
             shutil.rmtree(quilt_dir)
-        # Do other fancy stuff
+            if args.changesgenerate == "enable":
+                generate_changes_entry(args, basename, refreshed_patches)
