@@ -1,0 +1,10 @@
+<service name="refresh_ptaches">
+  <summary>Refreshes patches</summary>
+  <description>This service uses quilt to refresh patches.</description>
+  <!--<param name="url">
+    <description>Checkout url</description>
+    <required/>
+  </param>-->
+</service>
+
+
