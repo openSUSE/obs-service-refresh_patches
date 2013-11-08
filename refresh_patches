@@ -18,13 +18,31 @@ import argparse
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 
 
-QUILT_PUSH_SUCCESS_RE = r"Now at patch pull-request-57.patch"
-QUILT_PUSH_ERROR_RE = r"Patch .* does not apply (enforce with -f)$"
-QUILT_FINISHED_RE = r"File series fully applied, ends at"
+QUILT_PUSH_OFFSET_RE = r"Hunk #\d+ succeeded at \d+ \(offset .* lines\)\..*Now at patch (.*)$"
+QUILT_PUSH_SUCCESS_RE = r".*Now at patch (.*)$"
+QUILT_PUSH_ERROR_RE = r".*Patch .* does not apply \(enforce with -f\)$"
+QUILT_REFRESH_SUCCESS_RE = r"Refreshed patch (.*)"
+QUILT_SUCCESS_RE = r".*File series fully applied, ends at (.*)$"
+
+
+class QuiltException(Exception):
+    pass
+
+
+def silent_popen(args, **kwargs):
+    """Wrapper for subprocess.Popen with suppressed output.
+
+    STERR is redirected to STDOUT which is piped back to the
+    calling process and returned as the result.
+    """
+    return subprocess.Popen(args,
+                            stderr=subprocess.STDOUT,
+                            stdout=subprocess.PIPE, **kwargs).communicate()[0]
 
 
 if __name__ == "__main__":
@@ -32,28 +50,44 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    for specfile in glob.glob('./*.spec'):
+    for specfile in glob.glob('*.spec'):
         basename = specfile.rsplit('.spec')[0]
 
-        output = subprocess.check_output(["quilt", "setup", specfile])
+        output = silent_popen(["quilt", "setup", specfile])
         match = re.search(r"Unpacking archive ({0}.*)$".format(basename), output)
         if not match:
-            print("quilt setup failed")
-            sys.exit(1)
+            raise QuiltException("quilt setup failed:\n{0}".format(output))
         #NOTE(saschpe): Beautiful, I know:
         quilt_dir = match.group(1).rsplit(".tar")[0].rsplit(".zip")[0]
 
-        src_dir = os.getcwd()
-        os.chdir(quilt_dir)
-        output = subprocess.check_output(["quilt", "push"])
+        try:
+            src_dir = os.getcwd()
+            os.chdir(quilt_dir)
+            while True:
+                output = silent_popen(["quilt", "push"])
 
-
-        # Done with quilt, back to package sources
-        os.chdir(src_dir)
-
-   #quilt_setup()
-   #quilt_push()
-
-   #changes = create_changes()
-   #if changes:
-   #    update_changes_file(changes)
+                match = re.search(QUILT_SUCCESS_RE, output)
+                if match:  # We're done
+                    print("Finished refreshing patches for {0}".format(specfile))
+                    break
+                match = re.search(QUILT_PUSH_OFFSET_RE, output)
+                if match:  # Oh, got something to refresh
+                    print("Patch {0} refreshed".format(match.groups(1)[0]))
+                    output2 = silent_popen(["quilt", "refresh"])
+                    match2 = re.search(QUILT_REFRESH_SUCCESS_RE, output2)
+                    if not match:  # It didn't work
+                        raise QuiltException("Patch {0} refresh failed:\n{0}".format(match.groups(1)[0], output2))
+                    continue
+                match = re.search(QUILT_PUSH_SUCCESS_RE, output)
+                if match:  # Patch applied as is
+                    print("Patch {0} ok".format(match.groups(1)[0]))
+                    continue
+                match = re.search(QUILT_PUSH_ERROR_RE, output)
+                if match:  # Manual intervention needed
+                    raise QuiltException(output)
+        except QuiltException as e:
+            print(e.message)
+        finally:
+            os.chdir(src_dir)
+            shutil.rmtree(quilt_dir)
+        # Do other fancy stuff
