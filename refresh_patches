@@ -115,12 +115,22 @@ if __name__ == "__main__":
     for specfile in glob.glob('*.spec'):
         basename = specfile.rsplit('.spec')[0]
 
+        # There's no other way to find out what directory-name the tarball will be unpacked to
+        # rather than to diff the directory before and after invoking quilt (which invokes tar).
+        # Well, we could check the tarball contents for the top-most directory, but that's not any better...
+        src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+
         output = silent_popen(["quilt", "setup", specfile])
         match = re.search(r"Unpacking archive ({0}.*)$".format(basename), output)
         if not match:
             raise QuiltException("quilt setup failed:\n{0}".format(output))
-        #NOTE(saschpe): Beautiful, I know:
-        quilt_dir = match.group(1).rsplit(".tar")[0].rsplit(".zip")[0]
+
+        # Now let's find out what we actually untarred to...
+        src_dir_contents_post_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+        for d in src_dir_contents_post_tar:
+            if d not in src_dir_contents_pre_tar:
+                quilt_dir = d  # Found it!
+                break;
 
         refreshed_patches = []
         try:
