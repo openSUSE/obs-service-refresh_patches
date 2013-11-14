@@ -24,12 +24,16 @@ import subprocess
 import sys
 
 
-QUILT_PUSH_OFFSET_RE = r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$"
-QUILT_PUSH_SUCCESS_RE = r".*Now at patch (.*)$"
-QUILT_PUSH_ERROR_RE = r".*Patch .* does not apply \(enforce with -f\)$"
-QUILT_PUSH_REVERSE_RE = r".*Patch (.*) can be reverse-applied$"
-QUILT_REFRESH_SUCCESS_RE = r".*Refreshed patch (.*)"
-QUILT_SUCCESS_RE = r".*File series fully applied, ends at (.*)$"
+QUILT_SETUP_PATCHES_RE = re.compile(r".*### rpmbuild: tp+")
+QUILT_SETUP_SUCCESS_RE = re.compile(r".*Unpacking archive .*$")
+QUILT_PUSH_OFFSET_RE = re.compile(r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$")
+QUILT_PUSH_SUCCESS_RE = re.compile(r".*Now at patch (.*)$")
+QUILT_PUSH_ERROR_RE = re.compile(r".*Patch .* does not apply \(enforce with -f\)$")
+QUILT_PUSH_REVERSE_RE = re.compile(r".*Patch (.*) can be reverse-applied$")
+QUILT_REFRESH_SUCCESS_RE = re.compile(r".*Refreshed patch (.*)")
+QUILT_SUCCESS_RE = re.compile(r".*File series fully applied, ends at (.*)$")
+
+OSC_EMAIL_RE = re.compile(r"\s*email=(.*)$")
 
 PATCH_ENDINGS = ["patch", "diff", "dif"]
 
@@ -62,7 +66,7 @@ def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches
         try:
             with open(os.path.expanduser("~/.oscrc"), "r") as oscrc:
                 for line in oscrc.readlines():
-                    match = re.match(r"\s*email=(.*)$", line)
+                    match = OSC_EMAIL_RE.match(line)
                     if match:
                         args.changesauthor = match.groups(1)[0]
                         break
@@ -145,7 +149,7 @@ if __name__ == "__main__":
 
             output = silent_popen(["quilt", "setup", specfile])
             output_oneline = output.replace("\n", "")
-            match = re.match(r".*Unpacking archive .*$", output_oneline)
+            match = QUILT_SETUP_SUCCESS_RE.match(output_oneline)
             if not match:
                 raise QuiltException("quilt setup failed:\n{0}".format(output))
 
@@ -156,7 +160,7 @@ if __name__ == "__main__":
                     quilt_dir = d  # Found it!
                     break;
 
-            match = re.match(r".*### rpmbuild: tp+", output_oneline)
+            match = QUILT_SETUP_PATCHES_RE.match(output_oneline)
             if not match:
                 shutil.rmtree(quilt_dir)  # Cleanup to be prepared for next quilt run
                 continue
@@ -169,21 +173,21 @@ if __name__ == "__main__":
                     output = silent_popen(["quilt", "push"])
                     output_oneline = output.replace("\n", "")
 
-                    match = re.match(QUILT_SUCCESS_RE, output_oneline)
+                    match = QUILT_SUCCESS_RE.match(output_oneline)
                     if match:  # We're done
                         print("Finished refreshing patches for {0}".format(specfile))
                         break
-                    match = re.match(QUILT_PUSH_OFFSET_RE, output_oneline)
+                    match = QUILT_PUSH_OFFSET_RE.match(output_oneline)
                     if match:  # Oh, got something to refresh
                         patch_name = match.groups(1)[0]
                         print("Patch {0} refreshed".format(patch_name))
                         output2 = silent_popen(["quilt", "refresh"])
-                        match2 = re.match(QUILT_REFRESH_SUCCESS_RE, output2)
+                        match2 = QUILT_REFRESH_SUCCESS_RE.match(output2)
                         if not match2:  # It didn't work
                             raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
                         refreshed_patches.append(patch_name)
                         continue
-                    match = re.match(QUILT_PUSH_REVERSE_RE, output_oneline)
+                    match = QUILT_PUSH_REVERSE_RE.match(output_oneline)
                     if match:  # Patch was fully merged, drop it
                         patch_name = match.groups(1)[0]
                         print("Patch {0} merged upstream and dropped".format(patch_name))
@@ -195,11 +199,11 @@ if __name__ == "__main__":
                             os.remove(os.path.join(src_dir, patch_name))
                         dropped_patches.append(patch_name)
                         continue
-                    match = re.match(QUILT_PUSH_SUCCESS_RE, output_oneline)
+                    match = QUILT_PUSH_SUCCESS_RE.match(output_oneline)
                     if match:  # Patch applied as is
                         print("Patch {0} ok".format(match.groups(1)[0]))
                         continue
-                    match = re.match(QUILT_PUSH_ERROR_RE, output_oneline)
+                    match = QUILT_PUSH_ERROR_RE.match(output_oneline)
                     if match:  # Manual intervention needed
                         raise QuiltException(output)
             except QuiltException as e:
