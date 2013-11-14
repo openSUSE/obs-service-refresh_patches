@@ -30,9 +30,19 @@ QUILT_PUSH_ERROR_RE = r".*Patch .* does not apply \(enforce with -f\)$"
 QUILT_REFRESH_SUCCESS_RE = r".*Refreshed patch (.*)"
 QUILT_SUCCESS_RE = r".*File series fully applied, ends at (.*)$"
 
+PATCH_ENDINGS = ["patch", "diff", "dif"]
+
 
 class QuiltException(Exception):
     pass
+
+
+def is_patch(filename):
+    parts = filename.rsplit(".", 1)
+    if len(parts) == 2:  # there is actually an ending
+        if parts[1] in PATCH_ENDINGS:
+            return True
+    return False
 
 
 def silent_popen(args, **kwargs):
@@ -77,7 +87,7 @@ def generate_changes_entry(args, basename, refreshed_patches):
         for line in silent_popen(["osc", "status"]).split("\n"):
             if line.startswith("M "):  # Something got modified
                 filename = line[1:].strip()
-                if (filename.endswith(".patch") or filename.endswith(".diff") or filename.endswith(".dif")) and filename not in refreshed_patches:
+                if is_patch(filename) and filename not in refreshed_patches:
                     otherwise_modified_patches.append(filename)
     except OSError:
         pass  # No osc installed, sad thing
@@ -112,59 +122,70 @@ if __name__ == "__main__":
                         help='osc service parameter that does nothing')
     args = parser.parse_args()
 
-    for specfile in glob.glob('*.spec'):
-        basename = specfile.rsplit('.spec')[0]
+    # Check if there are patch files present, otherwise the service doesn't need to run:
+    have_patches = False
+    for filename in os.listdir("."):
+        if is_patch(filename):
+            have_patches = True
 
-        # There's no other way to find out what directory-name the tarball will be unpacked to
-        # rather than to diff the directory before and after invoking quilt (which invokes tar).
-        # Well, we could check the tarball contents for the top-most directory, but that's not any better...
-        src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+    if have_patches:
+        for specfile in glob.glob('*.spec'):
+            basename = specfile.rsplit('.spec')[0]
 
-        output = silent_popen(["quilt", "setup", specfile])
-        match = re.match(r".*Unpacking archive .*$", output.replace("\n", ""))
-        if not match:
-            raise QuiltException("quilt setup failed:\n{0}".format(output))
+            # There's no other way to find out what directory-name the tarball will be unpacked to
+            # rather than to diff the directory before and after invoking quilt (which invokes tar).
+            # Well, we could check the tarball contents for the top-most directory, but that's not any better...
+            src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
 
-        # Now let's find out what we actually untarred to...
-        src_dir_contents_post_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
-        for d in src_dir_contents_post_tar:
-            if d not in src_dir_contents_pre_tar:
-                quilt_dir = d  # Found it!
-                break;
+            output = silent_popen(["quilt", "setup", specfile])
+            output_oneline = output.replace("\n", "")
+            match = re.match(r".*### rpmbuild: tp+", output_oneline)
+            if not match:
+                continue
+            match = re.match(r".*Unpacking archive .*$", output_oneline)
+            if not match:
+                raise QuiltException("quilt setup failed:\n{0}".format(output))
 
-        refreshed_patches = []
-        try:
-            src_dir = os.getcwd()
-            os.chdir(quilt_dir)
-            while True:
-                output = silent_popen(["quilt", "push"])
-                output_oneline = output.replace("\n", "")
+            # Now let's find out what we actually untarred to...
+            src_dir_contents_post_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+            for d in src_dir_contents_post_tar:
+                if d not in src_dir_contents_pre_tar:
+                    quilt_dir = d  # Found it!
+                    break;
 
-                match = re.match(QUILT_SUCCESS_RE, output_oneline)
-                if match:  # We're done
-                    print("Finished refreshing patches for {0}".format(specfile))
-                    break
-                match = re.match(QUILT_PUSH_OFFSET_RE, output_oneline)
-                if match:  # Oh, got something to refresh
-                    patch_name = match.groups(1)[0]
-                    print("Patch {0} refreshed".format(patch_name))
-                    output2 = silent_popen(["quilt", "refresh"])
-                    match2 = re.match(QUILT_REFRESH_SUCCESS_RE, output2)
-                    if not match2:  # It didn't work
-                        raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
-                    refreshed_patches.append(patch_name)
-                    continue
-                match = re.match(QUILT_PUSH_SUCCESS_RE, output_oneline)
-                if match:  # Patch applied as is
-                    print("Patch {0} ok".format(match.groups(1)[0]))
-                    continue
-                match = re.match(QUILT_PUSH_ERROR_RE, output_oneline)
-                if match:  # Manual intervention needed
-                    raise QuiltException(output)
-        except QuiltException as e:
-            print(e.message)
-        finally:
-            os.chdir(src_dir)
-            shutil.rmtree(quilt_dir)
-            if args.changesgenerate == "enable":
-                generate_changes_entry(args, basename, refreshed_patches)
+            refreshed_patches = []
+            try:
+                src_dir = os.getcwd()
+                os.chdir(quilt_dir)
+                while True:
+                    output = silent_popen(["quilt", "push"])
+                    output_oneline = output.replace("\n", "")
+
+                    match = re.match(QUILT_SUCCESS_RE, output_oneline)
+                    if match:  # We're done
+                        print("Finished refreshing patches for {0}".format(specfile))
+                        break
+                    match = re.match(QUILT_PUSH_OFFSET_RE, output_oneline)
+                    if match:  # Oh, got something to refresh
+                        patch_name = match.groups(1)[0]
+                        print("Patch {0} refreshed".format(patch_name))
+                        output2 = silent_popen(["quilt", "refresh"])
+                        match2 = re.match(QUILT_REFRESH_SUCCESS_RE, output2)
+                        if not match2:  # It didn't work
+                            raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
+                        refreshed_patches.append(patch_name)
+                        continue
+                    match = re.match(QUILT_PUSH_SUCCESS_RE, output_oneline)
+                    if match:  # Patch applied as is
+                        print("Patch {0} ok".format(match.groups(1)[0]))
+                        continue
+                    match = re.match(QUILT_PUSH_ERROR_RE, output_oneline)
+                    if match:  # Manual intervention needed
+                        raise QuiltException(output)
+            except QuiltException as e:
+                print(e.message)
+            finally:
+                os.chdir(src_dir)
+                shutil.rmtree(quilt_dir)
+                if args.changesgenerate == "enable":
+                    generate_changes_entry(args, basename, refreshed_patches)
