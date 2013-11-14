@@ -139,9 +139,6 @@ if __name__ == "__main__":
 
             output = silent_popen(["quilt", "setup", specfile])
             output_oneline = output.replace("\n", "")
-            match = re.match(r".*### rpmbuild: tp+", output_oneline)
-            if not match:
-                continue
             match = re.match(r".*Unpacking archive .*$", output_oneline)
             if not match:
                 raise QuiltException("quilt setup failed:\n{0}".format(output))
@@ -152,6 +149,11 @@ if __name__ == "__main__":
                 if d not in src_dir_contents_pre_tar:
                     quilt_dir = d  # Found it!
                     break;
+
+            match = re.match(r".*### rpmbuild: tp+", output_oneline)
+            if not match:
+                shutil.rmtree(quilt_dir)  # Cleanup to be prepared for next quilt run
+                continue
 
             refreshed_patches = []
             try:
