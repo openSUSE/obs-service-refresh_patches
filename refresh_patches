@@ -121,7 +121,7 @@ if __name__ == "__main__":
         src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
 
         output = silent_popen(["quilt", "setup", specfile])
-        match = re.match(r".*Unpacking archive ({0}.*)$".format(basename), output.replace("\n", ""))
+        match = re.match(r".*Unpacking archive .*$", output.replace("\n", ""))
         if not match:
             raise QuiltException("quilt setup failed:\n{0}".format(output))
 
@@ -137,27 +137,28 @@ if __name__ == "__main__":
             src_dir = os.getcwd()
             os.chdir(quilt_dir)
             while True:
-                output = silent_popen(["quilt", "push"]).replace("\n", "")
+                output = silent_popen(["quilt", "push"])
+                output_oneline = output.replace("\n", "")
 
-                match = re.match(QUILT_SUCCESS_RE, output)
+                match = re.match(QUILT_SUCCESS_RE, output_oneline)
                 if match:  # We're done
                     print("Finished refreshing patches for {0}".format(specfile))
                     break
-                match = re.match(QUILT_PUSH_OFFSET_RE, output)
+                match = re.match(QUILT_PUSH_OFFSET_RE, output_oneline)
                 if match:  # Oh, got something to refresh
                     patch_name = match.groups(1)[0]
                     print("Patch {0} refreshed".format(patch_name))
                     output2 = silent_popen(["quilt", "refresh"])
                     match2 = re.match(QUILT_REFRESH_SUCCESS_RE, output2)
-                    if not match:  # It didn't work
+                    if not match2:  # It didn't work
                         raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
                     refreshed_patches.append(patch_name)
                     continue
-                match = re.match(QUILT_PUSH_SUCCESS_RE, output)
+                match = re.match(QUILT_PUSH_SUCCESS_RE, output_oneline)
                 if match:  # Patch applied as is
                     print("Patch {0} ok".format(match.groups(1)[0]))
                     continue
-                match = re.match(QUILT_PUSH_ERROR_RE, output)
+                match = re.match(QUILT_PUSH_ERROR_RE, output_oneline)
                 if match:  # Manual intervention needed
                     raise QuiltException(output)
         except QuiltException as e:
