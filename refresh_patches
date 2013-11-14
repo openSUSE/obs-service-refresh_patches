@@ -24,6 +24,8 @@ import subprocess
 import sys
 
 
+OSC_EMAIL_RE = re.compile(r"\s*email=(.*)$")
+
 QUILT_SETUP_PATCHES_RE = re.compile(r".*### rpmbuild: tp+")
 QUILT_SETUP_SUCCESS_RE = re.compile(r".*Unpacking archive .*$")
 QUILT_PUSH_OFFSET_RE = re.compile(r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$")
@@ -33,7 +35,8 @@ QUILT_PUSH_REVERSE_RE = re.compile(r".*Patch (.*) can be reverse-applied$")
 QUILT_REFRESH_SUCCESS_RE = re.compile(r".*Refreshed patch (.*)")
 QUILT_SUCCESS_RE = re.compile(r".*File series fully applied, ends at (.*)$")
 
-OSC_EMAIL_RE = re.compile(r"\s*email=(.*)$")
+SPEC_PATCH_PREAMBLE_RE_TEMPLATE = r"Patch(\d+):\s*{0}"  # Needs patch name, group(1) returns patch number
+SPEC_PATCH_PRE_SECTION_RE_TEMPLATE = r"%patch{0}.*"  # Needs patch number, ^
 
 PATCH_ENDINGS = ["patch", "diff", "dif"]
 
@@ -188,15 +191,31 @@ if __name__ == "__main__":
                         refreshed_patches.append(patch_name)
                         continue
                     match = QUILT_PUSH_REVERSE_RE.match(output_oneline)
-                    if match:  # Patch was fully merged, drop it
+                    if match:  # Patch was fully merged, mark it for dropping
                         patch_name = match.groups(1)[0]
-                        print("Patch {0} merged upstream and dropped".format(patch_name))
                         try:
                             os.chdir(src_dir)
                             silent_popen(["osc", "rm", patch_name])
                             os.chdir(quilt_dir)
                         except OSError:  # No osc installed, let's still kill the file:
                             os.remove(os.path.join(src_dir, patch_name))
+                        # Let's try to remove it from the spec file too.
+                        with open(os.path.join(src_dir, specfile), "r") as f:
+                            lines = f.readlines()
+                        with open(os.path.join(src_dir, specfile), "w") as f:
+                            patch_number = None
+                            for line in lines:
+                                # Try to kill the preamble line first and return the patch number
+                                match = re.match(SPEC_PATCH_PREAMBLE_RE_TEMPLATE.format(patch_name), line)
+                                if match:
+                                    patch_number = match.groups(1)[0]
+                                    continue
+                                if patch_number:  # Use the patch number to find the %pre section line...
+                                    match = re.match(SPEC_PATCH_PRE_SECTION_RE_TEMPLATE.format(patch_number), line)
+                                    if match:
+                                        continue
+                                f.write(line)
+                        print("Patch {0} merged upstream and dropped".format(patch_name))
                         dropped_patches.append(patch_name)
                         continue
                     match = QUILT_PUSH_SUCCESS_RE.match(output_oneline)
