@@ -27,6 +27,7 @@ import sys
 QUILT_PUSH_OFFSET_RE = r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$"
 QUILT_PUSH_SUCCESS_RE = r".*Now at patch (.*)$"
 QUILT_PUSH_ERROR_RE = r".*Patch .* does not apply \(enforce with -f\)$"
+QUILT_PUSH_REVERSE_RE = r".*Patch (.*) can be reverse-applied$"
 QUILT_REFRESH_SUCCESS_RE = r".*Refreshed patch (.*)"
 QUILT_SUCCESS_RE = r".*File series fully applied, ends at (.*)$"
 
@@ -56,7 +57,7 @@ def silent_popen(args, **kwargs):
                             stdout=subprocess.PIPE, **kwargs).communicate()[0]
 
 
-def generate_changes_entry(args, basename, refreshed_patches):
+def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches=[]):
     if not args.changesauthor:
         try:
             with open(os.path.expanduser("~/.oscrc"), "r") as oscrc:
@@ -80,6 +81,11 @@ def generate_changes_entry(args, basename, refreshed_patches):
         write_changes = True
         for patch in refreshed_patches:
             changes += "  + {0} (only offset)\n".format(patch)
+
+    if dropped_patches:
+        write_changes = True
+        for patch in dropped_patches:
+            changes += "  + {0} dropped (merged upstream)\n".format(patch)
 
     # Check with osc for otherwise modified patches:
     otherwise_modified_patches = []
@@ -155,7 +161,7 @@ if __name__ == "__main__":
                 shutil.rmtree(quilt_dir)  # Cleanup to be prepared for next quilt run
                 continue
 
-            refreshed_patches = []
+            refreshed_patches, dropped_patches = [], []
             try:
                 src_dir = os.getcwd()
                 os.chdir(quilt_dir)
@@ -177,6 +183,18 @@ if __name__ == "__main__":
                             raise QuiltException("Patch {0} refresh failed:\n{0}".format(patch_name, output2))
                         refreshed_patches.append(patch_name)
                         continue
+                    match = re.match(QUILT_PUSH_REVERSE_RE, output_oneline)
+                    if match:  # Patch was fully merged, drop it
+                        patch_name = match.groups(1)[0]
+                        print("Patch {0} merged upstream and dropped".format(patch_name))
+                        try:
+                            os.chdir(src_dir)
+                            silent_popen(["osc", "rm", patch_name])
+                            os.chdir(quilt_dir)
+                        except OSError:  # No osc installed, let's still kill the file:
+                            os.remove(os.path.join(src_dir, patch_name))
+                        dropped_patches.append(patch_name)
+                        continue
                     match = re.match(QUILT_PUSH_SUCCESS_RE, output_oneline)
                     if match:  # Patch applied as is
                         print("Patch {0} ok".format(match.groups(1)[0]))
@@ -190,4 +208,4 @@ if __name__ == "__main__":
                 os.chdir(src_dir)
                 shutil.rmtree(quilt_dir)
                 if args.changesgenerate == "enable":
-                    generate_changes_entry(args, basename, refreshed_patches)
+                    generate_changes_entry(args, basename, refreshed_patches, dropped_patches)
