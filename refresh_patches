@@ -154,7 +154,8 @@ if __name__ == "__main__":
             output_oneline = output.replace("\n", "")
             match = QUILT_SETUP_SUCCESS_RE.match(output_oneline)
             if not match:
-                raise QuiltException("quilt setup failed:\n{0}".format(output))
+                print("quilt setup failed:\n{0}".format(output))
+                sys.exit(1)
 
             # Now let's find out what we actually untarred to...
             src_dir_contents_post_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
@@ -225,10 +226,13 @@ if __name__ == "__main__":
                     match = QUILT_PUSH_ERROR_RE.match(output_oneline)
                     if match:  # Manual intervention needed
                         raise QuiltException(output)
+                if args.changesgenerate == "enable":
+                    os.chdir(src_dir)
+                    generate_changes_entry(args, basename, refreshed_patches, dropped_patches)
+                    os.chdir(quilt_dir)
             except QuiltException as e:
-                print(e.message)
+                print(e)
+                sys.exit(1)
             finally:
                 os.chdir(src_dir)
                 shutil.rmtree(quilt_dir)
-                if args.changesgenerate == "enable":
-                    generate_changes_entry(args, basename, refreshed_patches, dropped_patches)
