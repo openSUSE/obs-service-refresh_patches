@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 
-OSC_EMAIL_RE = re.compile(r"\s*email=(.*)$")
+OSC_EMAIL_RE = re.compile(r"\s*email\s*=\s*(.*)$")
 
 QUILT_SETUP_PATCHES_RE = re.compile(r".*### rpmbuild: tp+")
 QUILT_SETUP_SUCCESS_RE = re.compile(r".*Unpacking archive .*$")
