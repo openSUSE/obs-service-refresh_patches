@@ -74,7 +74,9 @@ def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches
                         args.changesauthor = match.groups(1)[0]
                         break
         except IOError:
-            args.changesauthor = "opensuse-packaging@opensuse.org",
+            pass
+    if not args.changesauthor:
+        args.changesauthor = "opensuse-packaging@opensuse.org"
 
     write_changes = False
     timestamp = datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y")
