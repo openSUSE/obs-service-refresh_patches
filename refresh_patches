@@ -36,7 +36,7 @@ QUILT_REFRESH_SUCCESS_RE = re.compile(r".*Refreshed patch (.*)")
 QUILT_SUCCESS_RE = re.compile(r".*File series fully applied, ends at (.*)$")
 
 SPEC_PATCH_PREAMBLE_RE_TEMPLATE = r"Patch(\d+):\s*{0}"  # Needs patch name, group(1) returns patch number
-SPEC_PATCH_PRE_SECTION_RE_TEMPLATE = r"%patch{0}.*"  # Needs patch number, ^
+SPEC_PATCH_PRE_SECTION_RE_TEMPLATE = r"%patch{0}\s+.*"  # Needs patch number, ^
 
 PATCH_ENDINGS = ["patch", "diff", "dif"]
 
