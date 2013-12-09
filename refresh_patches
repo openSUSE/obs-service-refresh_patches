@@ -31,7 +31,7 @@ QUILT_SETUP_SUCCESS_RE = re.compile(r".*Unpacking archive .*$")
 QUILT_PUSH_OFFSET_RE = re.compile(r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$")
 QUILT_PUSH_SUCCESS_RE = re.compile(r".*Now at patch (.*)$")
 QUILT_PUSH_ERROR_RE = re.compile(r".*Patch .* does not apply \(enforce with -f\)$")
-QUILT_PUSH_REVERSE_RE = re.compile(r".*Patch (.*) can be reverse-applied$")
+QUILT_PUSH_REVERSE_RE = re.compile(r".*Patch (?:patches/)?(.*) can be reverse-applied$")
 QUILT_REFRESH_SUCCESS_RE = re.compile(r".*Refreshed patch (.*)")
 QUILT_SUCCESS_RE = re.compile(r".*File series fully applied, ends at (.*)$")
 
