@@ -137,6 +137,10 @@ if __name__ == "__main__":
                         help='osc service parameter that does nothing')
     args = parser.parse_args()
 
+    # Switch to C locale since we're parsing output of localized commands
+    os.environ['LC_ALL'] = 'C'
+    os.environ['LANG'] = 'C'
+
     # Check if there are patch files present, otherwise the service doesn't need to run:
     have_patches = False
     for filename in os.listdir("."):
