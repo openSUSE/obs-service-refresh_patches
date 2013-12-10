@@ -185,7 +185,7 @@ if __name__ == "__main__":
                         break
                     match = QUILT_PUSH_OFFSET_RE.match(output_oneline)
                     if match:  # Oh, got something to refresh
-                        patch_name = match.groups(1)[0]
+                        patch_name = os.path.basename(match.groups(1)[0])
                         print("Patch {0} refreshed".format(patch_name))
                         output2 = silent_popen(["quilt", "refresh"])
                         match2 = QUILT_REFRESH_SUCCESS_RE.match(output2)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         continue
                     match = QUILT_PUSH_REVERSE_RE.match(output_oneline)
                     if match:  # Patch was fully merged, mark it for dropping
-                        patch_name = match.groups(1)[0]
+                        patch_name = os.path.basename(match.groups(1)[0])
                         try:
                             os.chdir(src_dir)
                             silent_popen(["osc", "rm", patch_name])
