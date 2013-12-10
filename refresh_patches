@@ -28,6 +28,7 @@ OSC_EMAIL_RE = re.compile(r"\s*email\s*=\s*(.*)$")
 
 QUILT_SETUP_PATCHES_RE = re.compile(r".*### rpmbuild: tp+")
 QUILT_SETUP_SUCCESS_RE = re.compile(r".*Unpacking archive .*$")
+QUILT_PUSH_FUZZ_RE = re.compile(r".*Hunk #\d+ succeeded at \d+ with fuzz \d+.*\..*Now at patch (.*)$")
 QUILT_PUSH_OFFSET_RE = re.compile(r".*Hunk #\d+ succeeded at \d+ .*\..*Now at patch (.*)$")
 QUILT_PUSH_SUCCESS_RE = re.compile(r".*Now at patch (.*)$")
 QUILT_PUSH_ERROR_RE = re.compile(r".*Patch .* does not apply \(enforce with -f\)$")
@@ -156,7 +157,7 @@ if __name__ == "__main__":
             # Well, we could check the tarball contents for the top-most directory, but that's not any better...
             src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
 
-            output = silent_popen(["quilt", "setup", "--fuzz=0", specfile])
+            output = silent_popen(["quilt", "setup", specfile])
             output_oneline = output.replace("\n", "")
             match = QUILT_SETUP_SUCCESS_RE.match(output_oneline)
             if not match:
@@ -187,6 +188,9 @@ if __name__ == "__main__":
                     if match:  # We're done
                         print("Finished refreshing patches for {0}".format(specfile))
                         break
+                    match = QUILT_PUSH_FUZZ_RE.match(output_oneline)
+                    if match:  # Manual intervention needed
+                        raise QuiltException(output)
                     match = QUILT_PUSH_OFFSET_RE.match(output_oneline)
                     if match:  # Oh, got something to refresh
                         patch_name = os.path.basename(match.groups(1)[0])
