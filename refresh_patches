@@ -152,7 +152,7 @@ if __name__ == "__main__":
             # Well, we could check the tarball contents for the top-most directory, but that's not any better...
             src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
 
-            output = silent_popen(["quilt", "setup", specfile])
+            output = silent_popen(["quilt", "setup", "--fuzz=0", specfile])
             output_oneline = output.replace("\n", "")
             match = QUILT_SETUP_SUCCESS_RE.match(output_oneline)
             if not match:
