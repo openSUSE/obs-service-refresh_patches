@@ -134,6 +134,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Refresh Patches")
     parser.add_argument("--changesgenerate", help="Whether or not to generate changes file entries from SCM commit log since a given parent revision (see changesrevision).  Default is 'disable'.")
     parser.add_argument("--changesauthor", help="The author of the changes file entry to be written, defaults to first email entry in ~/.oscrc or \"opensuse-packaging@opensuse.org\" if there is no .oscrc found.")
+    parser.add_argument("--ignorefuzz", help="The service stops when 'quilt patch' only works with fuzz. Set this flag to 'enable' if you want to refresh patches regardless of fuzz.")
     parser.add_argument('--outdir',
                         help='osc service parameter that does nothing')
     args = parser.parse_args()
@@ -190,7 +191,8 @@ if __name__ == "__main__":
                         break
                     match = QUILT_PUSH_FUZZ_RE.match(output_oneline)
                     if match:  # Manual intervention needed
-                        raise QuiltException(output)
+                        if args.ignorefuzz != "enable":
+                            raise QuiltException(output)
                     match = QUILT_PUSH_OFFSET_RE.match(output_oneline)
                     if match:  # Oh, got something to refresh
                         patch_name = os.path.basename(match.groups(1)[0])
