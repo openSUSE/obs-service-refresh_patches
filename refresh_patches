@@ -90,7 +90,8 @@ def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches
     if refreshed_patches:
         write_changes = True
         for patch in refreshed_patches:
-            changes += "  + {0} (only offset)\n".format(patch)
+            if args.ignorefuzz:
+                changes += "  + {0} (offset / fuzz)\n".format(patch)
 
     if dropped_patches:
         write_changes = True
