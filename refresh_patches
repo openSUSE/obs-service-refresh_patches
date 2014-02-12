@@ -88,9 +88,9 @@ def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches
     changes = "- Rebased patches:\n"
 
     if refreshed_patches:
-        write_changes = True
         for patch in refreshed_patches:
             if args.ignorefuzz:
+                write_changes = True
                 changes += "  + {0} (offset / fuzz)\n".format(patch)
 
     if dropped_patches:
