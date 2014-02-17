@@ -35,6 +35,7 @@ QUILT_PUSH_ERROR_RE = re.compile(r".*Patch .* does not apply \(enforce with -f\)
 QUILT_PUSH_REVERSE_RE = re.compile(r".*Patch (?:patches/)?(.*) can be reverse-applied$")
 QUILT_REFRESH_SUCCESS_RE = re.compile(r".*Refreshed patch (.*)")
 QUILT_SUCCESS_RE = re.compile(r".*File series fully applied, ends at (.*)$")
+QUILT_SERIES_EMPTY_RE = re.compile(r".*No patches in series$")
 
 SPEC_PATCH_PREAMBLE_RE_TEMPLATE = r"Patch(\d+):\s*{0}"  # Needs patch name, group(1) returns patch number
 SPEC_PATCH_PRE_SECTION_RE_TEMPLATE = r"%patch{0}\s+.*"  # Needs patch number, ^
@@ -190,6 +191,10 @@ if __name__ == "__main__":
                     if match:  # We're done
                         print("Finished refreshing patches for {0}".format(specfile))
                         break
+                    match = QUILT_SERIES_EMPTY_RE.match(output_oneline)
+                    if match:  # Either we removed all dropped patches from 'series' or ...
+                        print("Finished refreshing patches for {0}".format(specfile))
+                        break
                     match = QUILT_PUSH_FUZZ_RE.match(output_oneline)
                     if match:  # Manual intervention needed
                         if args.ignorefuzz != "enable":
@@ -207,12 +212,15 @@ if __name__ == "__main__":
                     match = QUILT_PUSH_REVERSE_RE.match(output_oneline)
                     if match:  # Patch was fully merged, mark it for dropping
                         patch_name = os.path.basename(match.groups(1)[0])
-                        try:
-                            os.chdir(src_dir)
-                            silent_popen(["osc", "rm", patch_name])
-                            os.chdir(quilt_dir)
-                        except OSError:  # No osc installed, let's still kill the file:
-                            os.remove(os.path.join(src_dir, patch_name))
+                        # Only remove the patch from the 'series' file to be able to go on with further
+                        # patches. Delete fully-merged patches only after all spec files have been processed.
+                        with open("series", "r") as f:
+                            lines = f.readlines()
+                        with open("series", "w") as f:
+                            for line in lines:
+                                if line == patch_name + "\n":
+                                    continue
+                                f.write(line)
                         # Let's try to remove it from the spec file too.
                         with open(os.path.join(src_dir, specfile), "r") as f:
                             lines = f.readlines()
@@ -229,7 +237,6 @@ if __name__ == "__main__":
                                     if match:
                                         continue
                                 f.write(line)
-                        print("Patch {0} merged upstream and dropped".format(patch_name))
                         dropped_patches.append(patch_name)
                         continue
                     match = QUILT_PUSH_SUCCESS_RE.match(output_oneline)
@@ -249,3 +256,10 @@ if __name__ == "__main__":
             finally:
                 os.chdir(src_dir)
                 shutil.rmtree(quilt_dir)
+
+        for dropped_patch in dropped_patches:
+            print("Patch {0} merged upstream and dropped".format(patch_name))
+            try:
+                silent_popen(["osc", "rm", patch_name])
+            except OSError:  # No osc installed, let's still kill the file:
+                os.remove(os.path.join(src_dir, patch_name))
