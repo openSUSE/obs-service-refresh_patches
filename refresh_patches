@@ -152,6 +152,7 @@ if __name__ == "__main__":
             have_patches = True
 
     if have_patches:
+        dropped_patches = []
         for specfile in glob.glob('*.spec'):
             basename = specfile.rsplit('.spec')[0]
 
@@ -179,7 +180,7 @@ if __name__ == "__main__":
                 shutil.rmtree(quilt_dir)  # Cleanup to be prepared for next quilt run
                 continue
 
-            refreshed_patches, dropped_patches = [], []
+            refreshed_patches = []
             try:
                 src_dir = os.getcwd()
                 os.chdir(quilt_dir)
