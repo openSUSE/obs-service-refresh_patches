@@ -65,6 +65,8 @@ def silent_popen(args, **kwargs):
                             stderr=subprocess.STDOUT,
                             stdout=subprocess.PIPE, **kwargs).communicate()[0]
 
+def get_dirs(dir):
+    return [f for f in os.listdir(dir) if os.path.isdir(os.path.join(dir, f))]
 
 def generate_changes_entry(args, basename, refreshed_patches=[], dropped_patches=[]):
     if not args.changesauthor:
@@ -159,7 +161,7 @@ if __name__ == "__main__":
             # There's no other way to find out what directory-name the tarball will be unpacked to
             # rather than to diff the directory before and after invoking quilt (which invokes tar).
             # Well, we could check the tarball contents for the top-most directory, but that's not any better...
-            src_dir_contents_pre_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+            src_dir_contents_pre_tar = get_dirs(".")
 
             output = silent_popen(["quilt", "setup", specfile])
             output_oneline = output.replace("\n", "")
@@ -169,7 +171,7 @@ if __name__ == "__main__":
                 sys.exit(1)
 
             # Now let's find out what we actually untarred to...
-            src_dir_contents_post_tar = silent_popen("ls -l | grep '^d' | awk '{print $9}'", shell=True).strip().split("\n")
+            src_dir_contents_post_tar = get_dirs(".")
             for d in src_dir_contents_post_tar:
                 if d not in src_dir_contents_pre_tar:
                     quilt_dir = d  # Found it!
